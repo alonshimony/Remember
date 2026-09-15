@@ -1,6 +1,6 @@
 export function validateFile(name: string, mime: string, bytes: Uint8Array) {
-  if (bytes.length > 10 * 1024 * 1024)
-    throw new Error("Maximum attachment size is 10 MB");
+  if (bytes.length > 3 * 1024 * 1024)
+    throw new Error("Maximum attachment size is 3 MB");
   const starts = (signature: number[]) =>
     signature.every((b, i) => bytes[i] === b);
   if (mime === "image/png" && starts([137, 80, 78, 71, 13, 10, 26, 10]))

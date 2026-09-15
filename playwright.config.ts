@@ -15,8 +15,6 @@ export default defineConfig({
     url: "http://127.0.0.1:3000/capture",
     reuseExistingServer: false,
     env: {
-      NEXT_PUBLIC_SUPABASE_URL: "https://remember-test.supabase.co",
-      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "synthetic-test-public-key",
       NEXT_PUBLIC_APP_ENV: "e2e",
     },
     timeout: 120000,

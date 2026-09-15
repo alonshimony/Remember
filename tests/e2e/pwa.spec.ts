@@ -11,6 +11,13 @@ test("C10 public app shell can reopen offline without exposing private page data
   page,
   context,
 }) => {
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "Authentication required" }),
+    }),
+  );
   await page.goto("/capture");
   await expect(
     page.getByRole("heading", { name: "Welcome back." }),

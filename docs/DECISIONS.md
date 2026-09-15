@@ -1,3 +1,11 @@
+## Current override: Neon, Clerk, and Vercel
+
+The user explicitly requested Neon database hosting, Clerk login, and easy Vercel deployment. This supersedes the original Supabase/Render decisions below. The domain migrations remain ordinary PostgreSQL with an auth.uid() compatibility helper; there is no Supabase runtime service. Files are stored as small private bytea rows to avoid another account. Clerk verified subjects map to stable owner UUIDs. Server queries use pg over TLS with transaction-local roles. Vercel builds migrate under an advisory transaction lock; the Node worker uses authenticated Vercel Cron.
+
+Current references: [Neon connection guide](https://neon.com/docs/connect/connect-from-any-app), [Clerk Next.js setup](https://clerk.com/docs/nextjs/getting-started/quickstart), [Clerk Vercel domains](https://clerk.com/docs/guides/development/deployment/vercel), [Vercel payload limits](https://vercel.com/docs/functions/limitations), [Cron plan limits](https://vercel.com/docs/cron-jobs/usage-and-pricing).
+
+## Historical implementation decisions
+
 # Architecture decisions
 
 ## 2026-09-15

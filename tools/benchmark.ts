@@ -11,7 +11,7 @@ for (const f of [
   "202609150005_workers.sql",
   "202609150006_hardening.sql",
 ])
-  await db.exec(await readFile(`supabase/migrations/${f}`, "utf8"));
+  await db.exec(await readFile(`db/migrations/${f}`, "utf8"));
 const owner = "11111111-1111-4111-8111-111111111111";
 await db.exec(
   `insert into invited_owners values('benchmark@example.test');insert into auth.users values('${owner}','benchmark@example.test');insert into captures(id,owner_id,space_id,captured_at,timezone,original_payload_hash) select md5('capture'||g)::uuid,'${owner}',(select id from spaces limit 1),now()-g*interval '1 minute','Asia/Jerusalem',md5(g::text) from generate_series(1,10000) g;insert into revisions(owner_id,capture_id,number,text,content_hash) select owner_id,id,1,'Synthetic benchmark note '||id,md5(id::text) from captures;insert into entities(id,owner_id,space_id,name,kind) select md5('entity'||g)::uuid,'${owner}',(select id from spaces limit 1),'Synthetic topic '||g,'topic' from generate_series(1,10000) g;insert into entity_links(owner_id,space_id,entity_id,capture_id) select '${owner}',(select id from spaces limit 1),md5('entity'||g)::uuid,md5('capture'||g)::uuid from generate_series(1,10000) g;analyze;set role authenticated;select set_config('request.jwt.claim.sub','${owner}',false);`,

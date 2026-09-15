@@ -59,7 +59,16 @@ export async function POST(request: NextRequest) {
           result_limit: 12,
         });
         if (!semantic.error) {
-          const seen = new Set(permitted.map((s) => s.id));
+          const seen = new Set(
+            permitted.map(
+              (s: {
+                id: string;
+                current_revision: number;
+                no_ai: boolean;
+                deleted_at: string | null;
+              }) => s.id,
+            ),
+          );
           permitted = [
             ...permitted,
             ...(semantic.data || []).filter(
@@ -84,7 +93,14 @@ export async function POST(request: NextRequest) {
           .select("id,current_revision,no_ai,deleted_at")
           .in(
             "id",
-            permitted.map((s) => s.id),
+            permitted.map(
+              (s: {
+                id: string;
+                current_revision: number;
+                no_ai: boolean;
+                deleted_at: string | null;
+              }) => s.id,
+            ),
           ),
         client.from("profiles").select("ai_consent").single(),
       ]);
@@ -94,7 +110,12 @@ export async function POST(request: NextRequest) {
         permitted.some(
           (source) =>
             !fresh.data?.some(
-              (s) =>
+              (s: {
+                id: string;
+                current_revision: number;
+                no_ai: boolean;
+                deleted_at: string | null;
+              }) =>
                 s.id === source.id &&
                 s.current_revision === source.current_revision &&
                 !s.no_ai &&

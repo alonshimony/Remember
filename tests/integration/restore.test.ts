@@ -16,7 +16,7 @@ async function database() {
     "202609150006_hardening.sql",
     "202609150008_reminder_guards.sql",
   ])
-    await pg.exec(readFileSync(`supabase/migrations/${f}`, "utf8"));
+    await pg.exec(readFileSync(`db/migrations/${f}`, "utf8"));
   await pg.exec(
     `insert into invited_owners values('synthetic@example.test');insert into auth.users values('${owner}','synthetic@example.test');set role authenticated;select set_config('request.jwt.claim.sub','${owner}',false);`,
   );

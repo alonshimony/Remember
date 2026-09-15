@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import ClerkSession from "@/components/clerk-session";
+import { ClerkProvider } from "@clerk/nextjs";
 export const metadata: Metadata = {
   title: "Remember",
   description: "A quiet place for what matters.",
@@ -16,7 +18,16 @@ export const viewport: Viewport = {
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ? (
+          <ClerkProvider>
+            <ClerkSession />
+            {children}
+          </ClerkProvider>
+        ) : (
+          children
+        )}
+      </body>
     </html>
   );
 }

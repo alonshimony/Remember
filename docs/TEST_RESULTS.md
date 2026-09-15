@@ -1,3 +1,17 @@
+# Neon / Clerk / Vercel migration verification — 15 September 2026
+
+- `npm run typecheck`: passed.
+- `npm run lint`: passed, no warnings.
+- `npm test`: **41 tests passed**, including five new PostgreSQL/Neon tests and four Clerk-boundary tests.
+- `npm run build`: passed; Next.js API routes, Clerk proxy and Node worker compiled.
+- `npm run test:e2e`: **9 passed, 1 skipped**. Chromium capture/offline shell, mobile WebKit capture, draft persistence, mixed-language text, injection rendering and 320px layout pass against synthetic same-origin API fixtures. The existing Windows WebKit offline-navigation limitation remains skipped.
+
+The new SQL tests apply the complete Neon schema and pgvector extension, execute the actual query compiler, prove cross-owner reads/writes are blocked, verify private byte storage isolation/cascading deletion, reject privileged RPC/identifier injection, and deny identity/invitation access to the authenticated SQL role. Clerk tests mock provider responses to verify unsigned/forged requests, verified-subject mapping, unverified/uninvited email rejection and cross-origin write rejection.
+
+No live Neon project, Clerk account or Vercel deployment was configured or exercised. The tests do not substitute for TLS/connection permissions, real Clerk login/logout/production DNS, Vercel migration execution, exact-time reminders or iPhone push receipt. No private user data was used.
+
+## Historical implementation verification
+
 # Verification evidence
 
 Date: 15 September 2026. Environment: Windows, Node 24.13.0, npm 11.6.2. All data was synthetic. No paid model, real messages, live owner data or public deployment was used.

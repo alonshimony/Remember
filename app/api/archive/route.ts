@@ -15,9 +15,9 @@ export async function GET(req: NextRequest) {
     const files: Record<string, Uint8Array> = {};
     let bytes = 0;
     for (const attachment of data.attachments) {
-      if ((bytes += Number(attachment.size)) > 40 * 1024 * 1024)
+      if ((bytes += Number(attachment.size)) > 3 * 1024 * 1024)
         throw new Error(
-          "Attachment total exceeds interactive 40 MB archive limit",
+          "Attachment total exceeds interactive 3 MB archive limit",
         );
       const result = await client.storage
         .from("attachments")
@@ -28,6 +28,10 @@ export async function GET(req: NextRequest) {
         );
     }
     const archive = await createArchive(data, files);
+    if (archive.length > 4 * 1024 * 1024)
+      throw new Error(
+        "Archive exceeds the 4 MB Vercel download limit. Export fewer records using scoped integrations; multipart archives are not implemented yet.",
+      );
     return new Response(archive as Uint8Array<ArrayBuffer>, {
       headers: {
         "Content-Type": "application/zip",
@@ -45,6 +49,8 @@ export async function POST(req: NextRequest) {
     const body = await req.formData();
     const file = body.get("file");
     if (!(file instanceof File)) throw new Error("Archive file required");
+    if (file.size > 4 * 1024 * 1024)
+      throw new Error("Maximum archive upload is 4 MB");
     const archive = await inspectArchive(
       new Uint8Array(await file.arrayBuffer()),
     );

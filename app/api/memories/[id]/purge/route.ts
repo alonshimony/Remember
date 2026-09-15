@@ -1,3 +1,4 @@
+import { clerkClient } from "@clerk/nextjs/server";
 import { NextRequest } from "next/server";
 import { authorized, admin, failure } from "@/lib/auth/server";
 import { z } from "zod";
@@ -11,12 +12,16 @@ export async function POST(
       .object({ password: z.string().min(1).max(200) })
       .parse(await req.json());
     const id = z.uuid().parse((await params).id);
-    const proof = await client.auth.signInWithPassword({
-      email: user.email!,
-      password,
-    });
-    if (proof.error || proof.data.user?.id !== user.id)
-      throw new Error("Reauthentication failed");
+    try {
+      const proof = await (
+        await clerkClient()
+      ).users.verifyPassword({ userId: user.clerk_id, password });
+      if (!proof.verified) throw new Error("Invalid password");
+    } catch {
+      throw new Error(
+        "Reauthentication failed. Use your Clerk password; passwordless accounts must add a password in Clerk before permanent deletion.",
+      );
+    }
     const capture = await client
       .from("captures")
       .select("deleted_at")
@@ -32,7 +37,7 @@ export async function POST(
     if (files.data.length) {
       const removed = await client.storage
         .from("attachments")
-        .remove(files.data.map((f) => f.storage_key));
+        .remove(files.data.map((f: { storage_key: string }) => f.storage_key));
       if (removed.error)
         throw new Error("Attachment cleanup failed; memory retained");
       await client

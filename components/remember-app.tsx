@@ -17,7 +17,8 @@ import {
   LogOut,
   RefreshCw,
 } from "lucide-react";
-import type { User } from "@supabase/supabase-js";
+import type { User } from "@/lib/db/browser";
+import { SignIn } from "@clerk/nextjs";
 import { db, configured } from "@/lib/db/browser";
 import { LocalStore, syncQueue } from "@/lib/offline/store";
 import {
@@ -36,7 +37,9 @@ export async function api(path: string, init: RequestInit = {}) {
   const response = await fetch(path, {
     ...init,
     headers: {
-      Authorization: `Bearer ${session?.access_token}`,
+      ...(session?.access_token && session.access_token !== "cookie"
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {}),
       ...(init.body && !(init.body instanceof FormData)
         ? { "Content-Type": "application/json" }
         : {}),
@@ -97,6 +100,8 @@ export default function RememberApp() {
             setUser(cached);
           else setError("First-time offline use needs online account setup.");
         }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not load workspace");
       } finally {
         setLoading(false);
       }
@@ -104,7 +109,13 @@ export default function RememberApp() {
     const { data } = db.auth.onAuthStateChange((_event, session) =>
       setUser(session?.user ?? null),
     );
-    return () => data.subscription.unsubscribe();
+    const authError = (event: Event) =>
+      setError((event as CustomEvent<string>).detail);
+    window.addEventListener("remember-auth-error", authError);
+    return () => {
+      data.subscription.unsubscribe();
+      window.removeEventListener("remember-auth-error", authError);
+    };
   }, []);
   useEffect(() => {
     setStore(null);
@@ -219,7 +230,9 @@ export default function RememberApp() {
             .in("id", ids)
             .is("deleted_at", null);
           if (result.error) break;
-          const active = new Set((result.data || []).map((m) => m.id));
+          const active = new Set(
+            (result.data || []).map((m: { id: string }) => m.id),
+          );
           await store.memories.bulkPut(result.data || []);
           for (const id of ids)
             if (!active.has(id)) {
@@ -367,9 +380,9 @@ export default function RememberApp() {
         <div className="notice">
           <strong>Database setup needed</strong>
           <p>
-            Configure the Supabase URL and public key in <code>.env.local</code>
-            , apply the migrations, and provision an invited owner. The README
-            has the exact steps.
+            Connect Neon and Clerk using the four values listed in the README,
+            then deploy on Vercel. Your workspace will be created when you first
+            sign in.
           </p>
           No external AI is required.
         </div>
@@ -377,6 +390,20 @@ export default function RememberApp() {
           <ShieldCheck size={18} /> No notes have been saved or sent anywhere.
         </p>
       </div>
+    );
+  if (
+    !user &&
+    error &&
+    error !== "First-time offline use needs online account setup."
+  )
+    return (
+      <main className="auth">
+        <Brand />
+        <h1>Workspace unavailable</h1>
+        <p role="alert">{error}</p>
+        <button onClick={() => location.reload()}>Retry</button>
+        <button onClick={() => void db?.auth.signOut()}>Sign out</button>
+      </main>
     );
   if (!user)
     return (
@@ -584,61 +611,19 @@ export default function RememberApp() {
   );
 }
 function Login() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
   return (
     <main className="auth">
       <Brand />
       <p className="eyebrow">A little less to hold in your head</p>
       <h1>Welcome back.</h1>
-      <p className="muted">
-        Your notes, conversations, and things to remember. All in one quiet
-        place.
-      </p>
-      <form
-        className="stack"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          setBusy(true);
-          const result = await db!.auth.signInWithPassword({ email, password });
-          setError(result.error?.message || "");
-          setBusy(false);
-        }}
-      >
-        <label>
-          Email
-          <input
-            type="email"
-            autoComplete="username"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </label>
-        <label>
-          Password
-          <input
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </label>
-        <button className="primary" disabled={busy}>
-          {busy ? "Signing in…" : "Sign in"}
-        </button>
-        {error && (
-          <p role="alert" className="error">
-            {error}
-          </p>
-        )}
-      </form>
+      <p className="muted">Your private space for what matters.</p>
+      {process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ? (
+        <SignIn routing="hash" forceRedirectUrl="/capture" />
+      ) : (
+        <p>Sign-in requires Clerk configuration.</p>
+      )}
       <p className="hint">
-        <Lock size={16} /> Invitation only. Account access is provisioned by
-        your administrator.
+        <Lock size={16} /> Access is restricted to invited owners.
       </p>
     </main>
   );
@@ -1225,7 +1210,7 @@ function EntityPage({ id }: { id: string }) {
           .select("*")
           .in(
             "id",
-            links.data.map((x) => x.capture_id),
+            links.data.map((x: { capture_id: string }) => x.capture_id),
           )
           .is("deleted_at", null)
           .limit(50);

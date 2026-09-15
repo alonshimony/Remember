@@ -382,7 +382,7 @@ export default function MemoryDetail({
           <section className="card">
             <h2>Attachments</h2>
             <p className="muted">
-              Private files · 10 MB each · up to 10 files. PDFs are stored, not
+              Private files · 3 MB each · up to 10 files. PDFs are stored, not
               analyzed.
             </p>
             {attachments.map((a) => (

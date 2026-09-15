@@ -11,7 +11,7 @@ beforeAll(async () => {
     `create role anon;create role authenticated;create role service_role bypassrls;create schema auth;create table auth.users(id uuid primary key,email text);create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;grant usage on schema auth to authenticated;grant execute on function auth.uid() to authenticated;`,
   );
   await pg.exec(
-    readFileSync("supabase/migrations/202609150001_core.sql", "utf8"),
+    readFileSync("db/migrations/202609150001_core.sql", "utf8"),
   );
   await pg.exec(
     `insert into invited_owners values('synthetic-a@example.test'),('synthetic-b@example.test');insert into auth.users values('${a}','synthetic-a@example.test'),('${b}','synthetic-b@example.test');`,

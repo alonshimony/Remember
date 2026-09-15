@@ -3,39 +3,20 @@ const owner = "11111111-1111-4111-8111-111111111111",
   space = "22222222-2222-4222-8222-222222222222";
 async function fixture(page: Page) {
   const memories: Record<string, unknown>[] = [];
-  await page.addInitScript(
-    ({ owner }) => {
-      localStorage.setItem(
-        "sb-remember-test-auth-token",
-        JSON.stringify({
-          access_token: "synthetic-token",
-          refresh_token: "synthetic-refresh",
-          expires_at: 9999999999,
-          expires_in: 3600,
-          token_type: "bearer",
-          user: {
-            id: owner,
-            aud: "authenticated",
-            role: "authenticated",
-            email: "synthetic@example.test",
-          },
-        }),
-      );
-    },
-    { owner },
+  await page.route("**/api/auth/session", async (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        user: { id: owner, email: "synthetic@example.test" },
+      }),
+    }),
   );
-  await page.route("https://remember-test.supabase.co/**", async (route) => {
-    const url = new URL(route.request().url());
-    let body: unknown = [];
-    if (url.pathname === "/auth/v1/user")
-      body = {
-        id: owner,
-        aud: "authenticated",
-        role: "authenticated",
-        email: "synthetic@example.test",
-      };
-    if (url.pathname.includes("/profiles"))
-      body = {
+  await page.route("**/api/data", async (route) => {
+    const operation = route.request().postDataJSON();
+    let data: unknown = [];
+    if (operation.table === "profiles")
+      data = {
         owner_id: owner,
         display_name: "Synthetic tester",
         timezone: "Asia/Jerusalem",
@@ -43,10 +24,10 @@ async function fixture(page: Page) {
         no_ai_default: true,
         default_space_id: space,
       };
-    if (url.pathname.includes("/spaces"))
-      body = [{ id: space, name: "Private Inbox" }];
-    if (url.pathname.includes("/rpc/save_capture")) {
-      const { payload } = route.request().postDataJSON();
+    if (operation.table === "spaces")
+      data = [{ id: space, name: "Private Inbox" }];
+    if (operation.rpc === "save_capture") {
+      const { payload } = operation.args;
       if (!memories.some((m) => m.id === payload.id))
         memories.push({
           ...payload,
@@ -56,15 +37,14 @@ async function fixture(page: Page) {
           deleted_at: null,
           processing_status: "Not sent to AI",
         });
-      body = payload.id;
+      data = payload.id;
     }
-    if (url.pathname.includes("/memory_view")) body = memories;
-    if (url.pathname.includes("/rpc/timeline_page")) body = memories;
-    if (url.pathname.includes("/revisions")) body = [];
+    if (operation.table === "memory_view" || operation.rpc === "timeline_page")
+      data = memories;
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(body),
+      body: JSON.stringify({ data, error: null }),
     });
   });
   return memories;

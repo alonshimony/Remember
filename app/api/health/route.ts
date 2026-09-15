@@ -14,11 +14,12 @@ export async function GET(req: NextRequest) {
             ? "Configured; live provider verification required"
             : "No external AI",
         queued_jobs:
-          j.data?.filter((x) =>
+          j.data?.filter((x: { status: string }) =>
             ["pending", "retry", "running"].includes(x.status),
           ).length ?? "Unavailable",
         dead_jobs:
-          j.data?.filter((x) => x.status === "dead").length ?? "Unavailable",
+          j.data?.filter((x: { status: string }) => x.status === "dead")
+            .length ?? "Unavailable",
         last_worker_heartbeat:
           h.data?.last_run || "Not configured or never run",
         push: process.env.VAPID_PUBLIC_KEY

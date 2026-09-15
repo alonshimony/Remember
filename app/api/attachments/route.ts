@@ -5,7 +5,7 @@ import { digest } from "@/lib/export/archive";
 export async function POST(req: NextRequest) {
   try {
     const { client, user } = await authorized(req);
-    if (Number(req.headers.get("content-length") || 0) > 11 * 1024 * 1024)
+    if (Number(req.headers.get("content-length") || 0) > 4 * 1024 * 1024)
       throw new Error("File too large");
     const form = await req.formData();
     const file = form.get("file");

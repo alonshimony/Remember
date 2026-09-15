@@ -323,7 +323,10 @@ function DataSettings() {
             try {
               const session = (await db!.auth.getSession()).data.session;
               const response = await fetch("/api/archive", {
-                headers: { Authorization: `Bearer ${session?.access_token}` },
+                headers:
+                  session?.access_token && session.access_token !== "cookie"
+                    ? { Authorization: `Bearer ${session.access_token}` }
+                    : {},
               });
               if (!response.ok) throw new Error((await response.json()).error);
               download("remember-backup.zip", await response.blob());
@@ -340,8 +343,9 @@ function DataSettings() {
           Download private archive
         </button>
         <p className="hint">
-          Interactive limit: 1,000 records per table and 40 MB attachment bytes.
-          Larger exports are reported as unsupported, never silently truncated.
+          Interactive limit: 1,000 records per table and 3 MB attachment bytes;
+          4 MB ZIP upload/download. Larger exports are reported as unsupported,
+          never silently truncated.
         </p>
       </section>
       <section className="card stack">

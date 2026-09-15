@@ -12,14 +12,22 @@ export async function GET(
       .eq("id", (await params).id)
       .single();
     if (error || !data) throw new Error("Attachment not found");
-    const signed = await client.storage
+    if (req.nextUrl.searchParams.get("download") !== "1")
+      return Response.json(
+        { url: `/api/attachments/${(await params).id}?download=1` },
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    const file = await client.storage
       .from("attachments")
-      .createSignedUrl(data.storage_key, 60, { download: data.name });
-    if (signed.error) throw new Error("Attachment not available");
-    return Response.json(
-      { url: signed.data.signedUrl, expires_in: 60 },
-      { headers: { "Cache-Control": "no-store" } },
-    );
+      .download(data.storage_key);
+    if (!file.data) throw new Error("Attachment not available");
+    return new Response(file.data, {
+      headers: {
+        "Content-Type": file.data.type,
+        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(data.name)}`,
+        "Cache-Control": "private, no-store",
+      },
+    });
   } catch (e) {
     return failure(e);
   }

@@ -1,60 +1,75 @@
-# Deployment runbook
+# Deployment: Neon + Clerk + Vercel
 
-Do not deploy this preview for live private data until the remaining release gates in BUILD_STATE.md are satisfied. No hosting account, subscription or public deployment was created during implementation.
+## Fast path
 
-## 1. Staging database
+Use a fresh, dedicated Neon database with its default owner role. Copy the pooled connection string from Neon **Connect**. It should retain TLS parameters such as `sslmode=require`. The server uses the `pg` driver and transaction-local role changes, compatible with Neon's pooled connections.
 
-Create an isolated Supabase project. Disable public signups. Apply every migration in numeric order through the CLI or your controlled migration pipeline. The `invited_owners` trigger is an additional server-side allowlist. Verify two-user policies before adding live data.
+Create a Clerk application and configure email sign-in. Create or invite your own account, then verify the email address. `OWNER_EMAIL` must match that verified email. Remember rejects other identities even if Clerk allows them to register. For an invitation-only Clerk experience, also configure restricted sign-up in Clerk.
 
-```sh
-npx supabase login
-npx supabase link --project-ref YOUR_STAGING_REF
-npx supabase db push
+Import `alonshimony/Remember` into Vercel and add:
+
+```dotenv
+DATABASE_URL=postgresql://.../neondb?sslmode=require
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+CLERK_SECRET_KEY=sk_test_...
+OWNER_EMAIL=you@example.com
 ```
 
-Do not run `db reset` against a hosted production project. Migration 004 creates a private attachment bucket and its RLS policies. Migration 007 requires Supabase's pgvector extension. The application remains useful without an AI key; keep `AI_PROVIDER=none` until intentionally configured.
+Use **Next.js**, root `./`, Node **24.x**. Keep the repository build command (`npm run vercel-build`). Do not override it with `npm run build`, which deliberately does not migrate the database.
 
-Provision the account using the environment-based script described in README. Use Supabase's admin dashboard to set the correct site URL and allowed redirect URLs to the final HTTPS origin. Use a separate project and keys for production.
+Click Deploy. Migrations and the owner invitation run automatically; first verified Clerk sign-in creates the corresponding UUID owner and default spaces. `APP_URL` is optional because browser requests use same-origin URLs. No callback URL, webhook, password in Vercel, or Supabase credentials are needed.
 
-## 2. Managed Next.js service
+## Domains and Clerk instances
 
-The supplied `render.yaml` is a blueprint for a **Node web service**, not a static site. Connect the repository to Render after deployment authorization. Build with `npm ci && npm run build`; start with `npx next start --hostname 0.0.0.0 --port $PORT`.
+For an initial test on Vercel's generated `*.vercel.app` address, use Clerk development keys. For live production, add a domain you own to Vercel, create Clerk's production instance, complete its DNS setup, and switch both Clerk keys to that instance's production keys. Clerk production keys do not work on `*.vercel.app`.
 
-Set public database URL/key at build time because Next.js embeds public variables. Set APP_URL and server-only service-role key in the service secret store. Use HTTPS. Confirm the selected hosting plan supports your desired availability and body/runtime limits. The app enforces 10 MB attachments, 40 MB aggregate interactive archive attachments and a 60 MB compressed import cap; reduce these or use another appropriate Node service if its gateway is more restrictive. Do not select a plan based on an assumed free allowance.
+Clerk development and production identities are different. Use separate Neon branches/databases for those environments. If you need to transfer an existing workspace between Clerk instances, do a deliberate identity mapping migration after verifying the new account; the app never silently transfers private data based on a matching email.
 
-## 3. Optional AI
+Official guides: [Clerk on Vercel](https://clerk.com/docs/guides/development/deployment/vercel), [Clerk environments](https://clerk.com/docs/guides/development/managing-environments), [Neon connections](https://neon.com/docs/connect/connect-from-any-app).
 
-Set AI_PROVIDER=openai, OPENAI_API_KEY and explicit OPENAI_EXTRACTION_MODEL / OPENAI_ANSWER_MODEL. Verify those model IDs in the configured account before enabling consent. Optionally set OPENAI_EMBEDDING_MODEL; it must support 1,536-dimensional embeddings. Keep model identity with each index. A model change needs reindexing; unmatched indexes fall back to keywords. Notes over 20,000 characters currently have lexical retrieval only, although extraction is chunked.
+## Migrations and access control
 
-Set the per-owner daily request limit and a provider-side monetary spend cap. The application request cap is not a guaranteed currency budget. Provider token usage/cost accounting still needs the work listed in BUILD_STATE. `store: false` is not a zero-retention contract.
+`npm run db:migrate` is also available locally. It loads `.env.local`, takes a PostgreSQL transaction lock, checks migration checksums, and applies only pending migrations. Failures roll back the transaction and fail the deployment. It never resets the database or drops existing data.
 
-## 4. Worker and reminders
+`db/bootstrap.sql` defines the identity table and the `auth.uid()` compatibility function. These are ordinary PostgreSQL objects, not dependencies on Supabase Auth. The original domain SQL remains in `db/migrations`; the historical `_storage` migration is excluded and replaced by `db/files.sql`. Authenticated requests run with `SET LOCAL ROLE authenticated` and a transaction-local verified owner UUID. Workers use server credentials. Browser requests cannot call privileged worker/purge functions.
 
-Create a high-entropy WORKER_SECRET and keep it in both Supabase Function secrets and Vault. Set provider values separately in the Function environment. The web service's environment does not automatically configure an Edge Function.
+Use a dedicated database because the migrations create the application's public schema objects. This is a fresh Neon deployment path, not an automatic migration of an already populated Supabase database. If existing data must move, export and verify it before deliberately mapping owner IDs and moving attachment bytes.
 
-```sh
-npx supabase functions deploy worker --no-verify-jwt
-```
+For another invited owner, add their verified email to `invited_owners` through the trusted database console. Do not grant public signup database privileges. Remove their invitation to revoke app access. Changing `OWNER_EMAIL` adds an invitation at deployment; it does not remove earlier invitations or transfer their data.
 
-The function verifies the exact worker bearer secret itself. `verify_jwt=false` does **not** make it public: requests without that secret receive 401. Test that a public project key is rejected.
+## Attachments and archives
 
-Generate your VAPID public/private key pair using a standards-compatible tool. Store the private key and VAPID_SUBJECT only in the worker environment; expose only the public key to the app's authenticated configuration route. Set the same public key in the web service.
+Private bytes are stored in Neon with PostgreSQL RLS and foreign keys to attachment metadata. Downloads require an active Clerk session on every request. No public storage URLs are created. Deleting attachment metadata cascades to its bytes.
 
-Create Vault entries named `project_url` and `worker_secret`, then execute `supabase/schedule.sql`. It invokes the worker every minute; this is approximate scheduling, not exact-time or exactly-once delivery. Inspect invocation and delivery ledgers. Disable the Cron job in restore test projects. Never put actual secrets into the committed scheduler SQL.
+Files are limited to **3 MB each**. Interactive archives allow **3 MB aggregate attachment bytes** and **4 MB ZIP uploads/downloads**. These bounds leave room below Vercel's 4.5 MB function payload limit. Large multipart archives remain a product gap; this app does not claim to support them. Neon database/backup usage includes file bytes.
 
-## 5. Release checks
+[Official Vercel function limits](https://vercel.com/docs/functions/limitations).
 
-1. Run the clean install/build/test suite and the full-stack two-owner tests in staging.
-2. Save/reopen offline on an actual iPhone; verify original text and the same-owner queue.
-3. Opt in to push from the installed PWA. Close the browser and verify the backend attempts delivery. Record actual receipt separately from provider acceptance.
-4. Export an archive with attachment bytes, restore into an isolated database/storage environment and compare counts/hashes/relationships.
-5. Configure and test an independent encrypted backup destination. Until then, health must continue to say **External backup not configured**.
-6. Test API revocation and downstream deletion after a privacy/scope change.
+## Worker, AI, and push
 
-## Rollback / upgrades
+Basic capture/search needs no worker credentials. For scheduled work:
 
-Take a complete verified backup first. Prefer forward-fix SQL migrations; do not drop data to roll back the frontend. Retain immutable revisions and client operation UUIDs. IndexedDB upgrades are additive. The service worker does not call skipWaiting automatically; a tab with drafts/queued notes is not force-reloaded by an update. Close and reopen only after saving; explicit update prompting remains in BUILD_STATE.
+1. Set `CRON_SECRET` to a random secret of at least 32 characters in Vercel.
+2. The checked-in daily schedule calls `/api/cron`; Vercel sends `Authorization: Bearer <CRON_SECRET>` automatically.
+3. For timely reminders and extraction, use `* * * * *` on a plan supporting per-minute jobs, or call the same route from an external scheduler with the bearer secret. Vercel Hobby is limited to once daily and does not guarantee exact invocation time. The worker processes bounded batches and uses durable leases and retry state.
+4. For AI, set `AI_PROVIDER=openai`, `OPENAI_API_KEY`, explicit extraction/answer model IDs, and optionally an embedding model supporting 1,536 dimensions. Enable account consent in Settings. `AI_PROVIDER=none` is the default.
+5. For web push, generate keys with `npx web-push generate-vapid-keys`, then set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT=mailto:you@example.com` in Vercel. Opt in from the installed app. Provider acceptance is not proof of device receipt.
 
-## Costs
+[Scheduling limits](https://vercel.com/docs/cron-jobs/usage-and-pricing) and [securing Cron](https://vercel.com/docs/cron-jobs/manage-cron-jobs).
 
-Cost categories are application hosting, Supabase compute/database/storage/egress and recovery plan, optional model usage, domain registration and an independent backup destination. No guaranteed monthly total is claimed. Verify current provider plans against expected note, file, query and notification volume.
+## Troubleshooting
+
+- **Migration permission error:** use Neon's database-owner connection for initial setup; it must create roles, schemas, and the vector extension. Do not use a pre-existing `authenticated` role with login or RLS-bypass privileges.
+- **Configure Clerk keys:** add both keys from the same Clerk instance, then redeploy. Public keys are embedded at build time.
+- **Not invited:** verify the email in Clerk and check `OWNER_EMAIL` before redeploying. The invite is keyed by the verified primary email at first sign-in.
+- **Email exists under another Clerk identity:** use the original Clerk instance, or perform a reviewed identity migration. Automatic relinking is intentionally refused.
+- **Clerk production-key domain error:** use the configured custom domain and its DNS, or development keys for a preview.
+- **Permanent deletion fails with passwordless login:** the existing purge flow rechecks your password through Clerk. Add a password in Clerk first. Normal trash/restore does not require a password.
+- **Worker returns 401:** configure `CRON_SECRET` and use its exact bearer value. An ordinary login or public Clerk key is not a worker credential.
+- **Reminders are late:** check the schedule/plan and worker heartbeat in Settings. The default is daily.
+
+## Release checks and operations
+
+Verify real Clerk sign-in/sign-out, capture/reload, two-owner isolation, private file download, restore, and worker execution after deployment. Use staging data until the remaining gates in BUILD_STATE are completed. Existing product gaps remain; this migration does not close all of them.
+
+Take and verify an independent encrypted backup before upgrades. Neon restore/branching and independent archive backups serve different purposes; test both. Include file bytes and identity mappings. Use forward SQL migrations; rolling back a Vercel build does not roll back the database. Keep Cron disabled in restore test environments.

@@ -1,45 +1,64 @@
 # Remember
 
-A private, mobile-first memory timeline. Capture a conversation, decision or promise in your own words, then find it through your timeline, source retrieval and optional AI.
+A private, mobile-first memory timeline. Capture a conversation, decision, or promise in your own words and find it later.
 
-**Status: implementation preview; not yet approved for production.** The working capture, persistence, review, reminders, portability and integration paths are implemented. Required gaps and environmental verification are tracked explicitly in [BUILD_STATE](docs/BUILD_STATE.md). Nothing has been publicly deployed.
+**Stack: Next.js + Neon Postgres + Clerk + Vercel.** No Supabase account, Docker, separate storage account, or AI key is required.
 
-## Quick start
+## Deploy on Vercel
 
-Prerequisites: Node 24 LTS, npm 11.6.2, Docker Desktop and the Supabase CLI. No paid AI account is required.
+1. **Neon:** in your existing account, create a project/database for Remember. Open **Connect**, enable pooling, and copy the connection string. Use the default database-owner role for the initial schema setup.
+2. **Clerk:** create an application, enable email sign-in, and copy its publishable and secret keys. Create or invite your account in Clerk and verify your email. For a first deployment on `*.vercel.app`, use Clerk development (`pk_test_` / `sk_test_`) keys. Clerk production keys require your own domain and Clerk's DNS setup.
+3. Open [Vercel New Project](https://vercel.com/new), import **alonshimony/Remember**, and leave **Framework: Next.js**, **Root directory: ./**, and **Node: 24.x**.
+4. Add these four environment variables before clicking **Deploy**:
+
+| Variable                            | Value                                               |
+| ----------------------------------- | --------------------------------------------------- |
+| `DATABASE_URL`                      | Neon pooled Postgres connection string              |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk publishable key                               |
+| `CLERK_SECRET_KEY`                  | Clerk secret key from the same application/instance |
+| `OWNER_EMAIL`                       | Your verified Clerk email                           |
+
+The checked-in `vercel.json` selects the build command. Each deployment applies pending SQL migrations under a transaction lock, then builds Next.js. On first Clerk sign-in, Remember creates your private workspace automatically. There is no password-provisioning command or webhook to configure.
+
+Use a dedicated Neon database or branch for this app. For Vercel previews, use a separate Neon branch and Clerk development keys; do not point unreviewed preview builds at your live database. Secrets stay in Vercel's environment settings. Only the Clerk publishable key belongs in the browser.
+
+[Detailed deployment, domain, scheduler, and troubleshooting guide](docs/DEPLOYMENT.md).
+
+## Run locally
+
+Install Node 24, then:
 
 ```sh
 npm ci
-npx supabase start
-npx supabase db reset
 ```
 
-Copy `.env.example` to `.env.local`. Fill the local URL, public/anon key and service-role key printed by `supabase status`. Leave `AI_PROVIDER=none`. The service-role value is server-only.
-
-Provision the invited owner by supplying `OWNER_EMAIL` and `OWNER_PASSWORD` in the process environment, then run:
+Copy `.env.example` to `.env.local` and fill in the four required values above. On Windows: `Copy-Item .env.example .env.local`.
 
 ```sh
-node --env-file=.env.local --import tsx tools/provision-owner.ts
+npm run db:migrate
 npm run dev
 ```
 
-Open [localhost:3000/capture](http://localhost:3000/capture), sign in, and enable trusted-device storage if this is your personal browser. The provisioning script creates the allowlist entry before the account and sends no email. There is no hard-coded live owner and no public signup.
+Open [localhost:3000/capture](http://localhost:3000/capture) and sign in with Clerk. Use Clerk development keys locally. The same Neon database works locally; use a development branch to isolate test data.
 
-On Windows, `Copy-Item .env.example .env.local` works. Environment variables can be set through PowerShell or your local secret manager. Do not paste passwords or keys into a chat or commit `.env.local`.
+## What works
 
-Without Supabase configuration, the app displays setup instructions; it does not pretend to save. The SQL tests use embedded PostgreSQL and work without Docker. Docker was not installed on the development machine, so the full Supabase local-start commands above remain environment verification steps.
+- Capture, immutable revisions, timeline, keyword search, spaces, corrections, and trash.
+- Clerk sign-in, invitation-only workspace access, and SQL row-level owner isolation.
+- Trusted-device offline drafts and a persistent sync queue.
+- Private attachments stored in Neon (up to **3 MB per file**, 10 per memory).
+- Archive export/import, scoped integration tokens, folder sync, and local MCP.
+- Optional AI extraction and source-linked answers, reminders, and web push.
 
-## Daily use
+The project remains an implementation preview. [BUILD_STATE](docs/BUILD_STATE.md) lists the remaining product gaps and external verification. No live Neon/Clerk account or Vercel deployment was configured as part of this code change.
 
-- **Capture:** type, paste, or use your phone keyboard's dictation. Save needs no title or tags. Device save and server sync have separate status messages. Attach files from the saved memory.
-- **Timeline:** filter by space/date and keyword; open a memory for the original, immutable revisions, corrections, privacy controls and commitments.
-- **Ask:** without AI, view keyword-matched original sources. With account consent, provider configuration and permitted notes, receive validated source-linked answers. Semantic retrieval is optional and model-specific.
-- **Upcoming:** confirm suggested commitments, mark done/cancelled, schedule an explicit reminder, or approve annual birthday preparation. Notification delivery needs a configured backend scheduler and an opted-in device.
-- **iPhone:** visit the HTTPS deployment in Safari → Share → Add to Home Screen. Initialize online first. Real iPhone installation, keyboard behavior and push receipt still require manual testing.
-- **Backup/restore:** Settings → Your data downloads a private ZIP. Inspect its manifest. Preview before restoring; old reminders are disabled pending review. Archives can contain no-AI notes and must not automatically be sent to a model.
-- **Second brain:** Settings → Connections creates scoped read-only tokens. See [INTEGRATIONS](docs/INTEGRATIONS.md) for HTTP, folder sync and local MCP.
+## Background work
 
-## Verification commands
+For AI extraction and push reminders, set `CRON_SECRET` to a long random value. Vercel invokes `/api/cron` with that secret. The default schedule is **once daily**, compatible with Vercel Hobby. For frequent processing, use Vercel Pro with `* * * * *` in `vercel.json`, or an external scheduler that sends the same bearer secret. Daily scheduling is not suitable for exact-time reminders or a busy extraction queue.
+
+Optional AI and push variables are listed in `.env.example`. No-AI capture and keyword search work without them. The worker uses Node on Vercel; no Edge Function or Supabase Cron/Vault setup remains.
+
+## Verification
 
 ```sh
 npm run typecheck
@@ -48,25 +67,8 @@ npm test
 npm run build
 npx playwright install chromium webkit
 npm run test:e2e
-npx deno check --config supabase/functions/worker/deno.json supabase/functions/worker/index.ts
 ```
 
-See [TEST_RESULTS](docs/TEST_RESULTS.md) for actual runs and the distinction between database tests, mocked browser transport, real protocol tests and external/manual tests.
+SQL tests run embedded PostgreSQL with pgvector, including the Neon schema, without a Neon account. Browser transport tests use synthetic API responses; live Clerk, Neon networking, and device push still need verification after configuring your accounts. See [TEST_RESULTS](docs/TEST_RESULTS.md).
 
-Additional tools:
-
-```sh
-npm run db:types
-npm run archive -- inspect /path/to/remember-backup.zip
-npm run archive -- export /path/to/new-backup.zip
-npm run sync -- --folder /path/to/remember --dry-run
-npm run mcp
-```
-
-Archive export requires a short-lived owner access token in `REMEMBER_OWNER_ACCESS_TOKEN`; an integration token intentionally cannot read the full private archive. The CLI validates archive completeness and uses exclusive file creation.
-
-## Deployment and operations
-
-[DEPLOYMENT](docs/DEPLOYMENT.md) documents managed Next.js on Render + Supabase, invitation setup, private storage, worker secret, Vault/Cron, HTTPS and rollback. [OPERATIONS](docs/OPERATIONS.md) covers backups and restoration. [SECURITY](docs/SECURITY.md) describes boundaries and known risks. Official dependency references and decisions are in [DECISIONS](docs/DECISIONS.md).
-
-No analytics, public sharing, billing, inbox integration or autonomous outbound messaging is included.
+Additional tools: `npm run db:types`, `npm run archive -- inspect file.zip`, `npm run sync -- --folder ./memory --dry-run`, and `npm run mcp`. See [INTEGRATIONS](docs/INTEGRATIONS.md).
