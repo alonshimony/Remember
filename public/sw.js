@@ -1,0 +1,9 @@
+const CACHE='remember-shell-v1';
+self.addEventListener('install',event=>event.waitUntil((async()=>{const cache=await caches.open(CACHE);const shell=await fetch('/capture',{cache:'reload'});if(!shell.ok)throw new Error('App shell unavailable');const html=await shell.clone().text();await cache.put('/capture',shell);const assets=[...new Set([...html.matchAll(/\/_next\/static\/[^"\s<>\\]+/g)].map(match=>match[0]))];await cache.addAll(['/icon-192.png','/icon-512.png',...assets]);})()));
+self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('remember-shell-')&&k!==CACHE).map(k=>caches.delete(k))))));
+self.addEventListener('fetch',event=>{const url=new URL(event.request.url);if(url.origin!==self.location.origin||event.request.method!=='GET'||url.pathname.startsWith('/api/'))return;
+if(event.request.mode==='navigate'){event.respondWith(self.navigator.onLine?fetch(event.request).catch(()=>caches.match('/capture')):caches.match('/capture'));return;}
+if(url.pathname.startsWith('/_next/static/')||url.pathname.startsWith('/icon'))event.respondWith(caches.open(CACHE).then(async cache=>{const saved=await cache.match(event.request);if(saved)return saved;const response=await fetch(event.request);if(response.ok)await cache.put(event.request,response.clone());return response;}));});
+self.addEventListener('message',event=>{if(event.data==='APPLY_UPDATE')self.skipWaiting();});
+self.addEventListener('push',event=>{event.waitUntil(self.registration.showNotification('Remember',{body:'A reminder is ready. Open Remember to view it.',icon:'/icon-192.png',tag:event.data?.text()||'remember-reminder',data:{url:'/upcoming'}}));});
+self.addEventListener('notificationclick',event=>{event.notification.close();event.waitUntil(clients.openWindow('/upcoming'));});
