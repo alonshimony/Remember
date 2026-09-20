@@ -135,3 +135,49 @@ test("P07 malicious note text is rendered as text", async ({ page }) => {
     false,
   );
 });
+
+test("Capture is ready to type and keyboard save keeps focus for the next memory", async ({
+  page,
+}) => {
+  const memories = await fixture(page);
+  await page.goto("/capture");
+  const editor = page.getByRole("textbox", {
+    name: "What happened, or what do you need to remember?",
+  });
+  await expect(editor).toBeFocused();
+  await editor.fill("Synthetic keyboard capture");
+  await editor.press("Control+Enter");
+  await expect(page.getByText("Synced", { exact: true })).toBeVisible();
+  expect(memories).toHaveLength(1);
+  await expect(editor).toHaveValue("");
+  await expect(editor).toBeFocused();
+});
+
+test("Ask allows explicit current tasks and historical scope", async ({
+  page,
+}) => {
+  await fixture(page);
+  const scopes: string[] = [];
+  await page.route("**/api/ask", async (route) => {
+    scopes.push(route.request().postDataJSON().scope);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        mode: "sources",
+        message: "Current tasks use recent evidence.",
+        sources: [],
+      }),
+    });
+  });
+  await page.goto("/ask");
+  await page.getByRole("button", { name: "What needs doing now?" }).click();
+  await page.getByRole("button", { name: "Find in my memories" }).click();
+  await expect(
+    page.getByText("Current tasks use recent evidence."),
+  ).toBeVisible();
+  expect(scopes).toEqual(["current_tasks"]);
+  await page.getByLabel("Question timeframe").selectOption("history");
+  await page.getByRole("button", { name: "Find in my memories" }).click();
+  await expect.poll(() => scopes).toEqual(["current_tasks", "history"]);
+});

@@ -73,3 +73,7 @@ Basic capture/search needs no worker credentials. For scheduled work:
 Verify real Clerk sign-in/sign-out, capture/reload, two-owner isolation, private file download, restore, and worker execution after deployment. Use staging data until the remaining gates in BUILD_STATE are completed. Existing product gaps remain; this migration does not close all of them.
 
 Take and verify an independent encrypted backup before upgrades. Neon restore/branching and independent archive backups serve different purposes; test both. Include file bytes and identity mappings. Use forward SQL migrations; rolling back a Vercel build does not roll back the database. Keep Cron disabled in restore test environments.
+
+## Longer login sessions
+
+The app silently restores/refreshes Clerk sessions. For 90-day persistence, set Maximum lifetime to 90 days and disable Inactivity timeout in the correct Clerk instance. This requires a supported production plan; a Vercel deployment cannot change those account settings. See [SESSION_SETTINGS](SESSION_SETTINGS.md). Migration 012 is applied automatically by the next deployment.

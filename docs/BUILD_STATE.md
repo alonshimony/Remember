@@ -10,6 +10,12 @@ The user's follow-up replaces the original Supabase/Render choices with **Neon +
 
 The full Neon migration chain, including pgvector, runs in local SQL tests. Live Neon connections, Clerk sessions, deployment domains, Vercel build permissions and device notification receipt still require configured accounts. Existing product gaps below are retained.
 
+## 20 September: capture, session refresh and temporal relevance
+
+Added foreground/reconnect Clerk session restoration, single-retry token refresh, editor autofocus/keyboard save, and a PWA capture shortcut. The 90-day session lifetime remains a Clerk dashboard setting; no signed-in dashboard was available to change it.
+
+Migration 012 adds owner-isolated current-task retrieval: recent undated intentions, confirmed future deadlines and recently reconfirmed open tasks. Old raw intentions remain historical. Done/cancelled/past-due tasks and stale proposed tasks are excluded. Ask can select current tasks or full history; prompts carry current time/timezone/source dates and old mixed notes are narrowed to eligible evidence. This is a first temporal policy, not complete natural-language time understanding or bitemporal retrieval.
+
 ## Milestones
 
 | Milestone | Implemented                                                                                                                                                                                                         | Gate status                                                                                  |

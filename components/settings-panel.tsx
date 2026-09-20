@@ -1,4 +1,5 @@
 "use client";
+import { sessionFetch } from "@/lib/auth/browser";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { db } from "@/lib/db/browser";
@@ -322,7 +323,7 @@ function DataSettings() {
             setBusy(true);
             try {
               const session = (await db!.auth.getSession()).data.session;
-              const response = await fetch("/api/archive", {
+              const response = await sessionFetch("/api/archive", {
                 headers:
                   session?.access_token && session.access_token !== "cookie"
                     ? { Authorization: `Bearer ${session.access_token}` }

@@ -1,3 +1,4 @@
+import { sessionFetch } from "../auth/browser";
 import { queryClient, type Operation, type Result } from "./query";
 export type User = { id: string; email: string };
 type Session = { user: User; access_token: string };
@@ -19,7 +20,7 @@ function saveSession(value: Session | null) {
 }
 async function execute(operation: Operation): Promise<Result> {
   try {
-    const response = await fetch("/api/data", {
+    const response = await sessionFetch("/api/data", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(operation),
@@ -42,7 +43,7 @@ export const db = configured
       ...queryClient(execute),
       auth: {
         async getUser() {
-          const response = await fetch("/api/auth/session", {
+          const response = await sessionFetch("/api/auth/session", {
             cache: "no-store",
           });
           const result = await response.json();
@@ -89,7 +90,7 @@ export const db = configured
           };
         },
         async signOut() {
-          const response = await fetch("/api/auth/session", {
+          const response = await sessionFetch("/api/auth/session", {
             method: "DELETE",
           });
           if (!response.ok)

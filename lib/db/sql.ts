@@ -5,7 +5,7 @@ const tables = new Set(
   ),
 );
 const ownerRpcs = new Set(
-  "save_capture mutate_capture timeline_page search_memories semantic_memories consume_ai_budget move_capture retry_processing review_event schedule_birthday revoke_integration issue_integration archive_snapshot restore_archive".split(
+  "save_capture mutate_capture timeline_page search_memories current_task_sources semantic_memories consume_ai_budget move_capture retry_processing review_event schedule_birthday revoke_integration issue_integration archive_snapshot restore_archive".split(
     " ",
   ),
 );
@@ -90,7 +90,7 @@ export function compile(operation: Operation, privileged = false) {
   return { text, values, rpc: false };
 }
 export const setReturning = new Set(
-  "timeline_page search_memories semantic_memories claim_jobs claim_deliveries".split(
+  "timeline_page search_memories current_task_sources semantic_memories claim_jobs claim_deliveries".split(
     " ",
   ),
 );

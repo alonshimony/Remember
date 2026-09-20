@@ -1,4 +1,4 @@
-const CACHE='remember-shell-v1';
+const CACHE='remember-shell-v2';
 self.addEventListener('install',event=>event.waitUntil((async()=>{const cache=await caches.open(CACHE);const shell=await fetch('/capture',{cache:'reload'});if(!shell.ok)throw new Error('App shell unavailable');const html=await shell.clone().text();await cache.put('/capture',shell);const assets=[...new Set([...html.matchAll(/\/_next\/static\/[^"\s<>\\]+/g)].map(match=>match[0]))];await cache.addAll(['/icon-192.png','/icon-512.png',...assets]);})()));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('remember-shell-')&&k!==CACHE).map(k=>caches.delete(k))))));
 self.addEventListener('fetch',event=>{const url=new URL(event.request.url);if(url.origin!==self.location.origin||event.request.method!=='GET'||url.pathname.startsWith('/api/'))return;

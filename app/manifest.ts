@@ -7,6 +7,14 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Your private memory timeline",
     start_url: "/capture",
     display: "standalone",
+    shortcuts: [
+      {
+        name: "Add a memory",
+        short_name: "Capture",
+        url: "/capture",
+        description: "Quickly write something down",
+      },
+    ],
     background_color: "#f7f8f4",
     theme_color: "#355849",
     icons: [

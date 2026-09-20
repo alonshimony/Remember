@@ -1,3 +1,11 @@
+# Session refresh and temporal relevance — 20 September 2026
+
+- Typecheck and lint pass.
+- Unit/SQL/provider-boundary tests: **49 passed**. New cases cover old milk versus recent intentions, historical retention, confirmed future deadlines, done/cancelled/past-due exclusion, reconfirmation, delayed extraction, AI privacy, narrowed source citations, and a single silent session-token refresh retry.
+- Production build passes via the browser-test build command.
+- Browser suite: **13 passed, 1 existing Windows WebKit offline-navigation test skipped**. New desktop/mobile cases verify autofocus, keyboard save with retained focus, and explicit current-task/history selection.
+- Live Clerk session duration was not changed: the dashboard was signed out. No live AI provider or hosted Neon migration was exercised. Provider requests are mocked; SQL is executed in embedded PostgreSQL. Browser cookies remain subject to Clerk's instance settings and browser behavior.
+
 # Neon / Clerk / Vercel migration verification — 15 September 2026
 
 - `npm run typecheck`: passed.

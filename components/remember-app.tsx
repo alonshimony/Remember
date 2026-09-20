@@ -18,6 +18,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import type { User } from "@/lib/db/browser";
+import { sessionFetch } from "@/lib/auth/browser";
 import { SignIn } from "@clerk/nextjs";
 import { db, configured } from "@/lib/db/browser";
 import { LocalStore, syncQueue } from "@/lib/offline/store";
@@ -34,7 +35,7 @@ import Upcoming from "./upcoming";
 
 export async function api(path: string, init: RequestInit = {}) {
   const session = (await db!.auth.getSession()).data.session;
-  const response = await fetch(path, {
+  const response = await sessionFetch(path, {
     ...init,
     headers: {
       ...(session?.access_token && session.access_token !== "cookie"
@@ -106,9 +107,10 @@ export default function RememberApp() {
         setLoading(false);
       }
     })();
-    const { data } = db.auth.onAuthStateChange((_event, session) =>
-      setUser(session?.user ?? null),
-    );
+    const { data } = db.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if (session) setError("");
+    });
     const authError = (event: Event) =>
       setError((event as CustomEvent<string>).detail);
     window.addEventListener("remember-auth-error", authError);
@@ -647,6 +649,7 @@ function Capture({
   const [noAI, setNoAI] = useState(profile.no_ai_default);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const editor = useRef<HTMLTextAreaElement>(null);
   const [last, setLast] = useState<string | null>(null);
   const [savedPayload, setSavedPayload] = useState<ReturnType<
     typeof captureInput.parse
@@ -723,6 +726,7 @@ function Capture({
       }
       setLast(payload.id);
       setText("");
+      editor.current?.focus();
       operation.current = null;
       onSaved();
     } catch (e) {
@@ -766,6 +770,18 @@ function Capture({
           aria-label="What happened, or what do you need to remember?"
           dir="auto"
           className="editor"
+          ref={editor}
+          autoFocus
+          onKeyDown={(e) => {
+            if (
+              (e.metaKey || e.ctrlKey) &&
+              e.key === "Enter" &&
+              !e.nativeEvent.isComposing
+            ) {
+              e.preventDefault();
+              void save();
+            }
+          }}
           placeholder="What happened, or what do you need to remember?"
           value={text}
           onChange={(e) => {
@@ -802,6 +818,8 @@ function Capture({
           <button
             className="primary"
             disabled={busy || !text.trim()}
+            aria-keyshortcuts="Control+Enter Meta+Enter"
+            title="Save (Ctrl or Command + Enter)"
             onClick={() => void save()}
           >
             {busy ? (
@@ -1108,6 +1126,9 @@ function Timeline({
 }
 function Ask() {
   const [q, setQ] = useState("");
+  const [scope, setScope] = useState<"auto" | "current_tasks" | "history">(
+    "auto",
+  );
   const [result, setResult] = useState<{
     mode: string;
     message: string;
@@ -1133,7 +1154,7 @@ function Ask() {
             setResult(
               await api("/api/ask", {
                 method: "POST",
-                body: JSON.stringify({ question: q }),
+                body: JSON.stringify({ question: q, scope }),
               }),
             );
           } catch (e) {
@@ -1156,6 +1177,34 @@ function Ask() {
             maxLength={2000}
           />
         </label>
+        <label>
+          Look through
+          <select
+            aria-label="Question timeframe"
+            value={scope}
+            onChange={(e) =>
+              setScope(e.target.value as "auto" | "current_tasks" | "history")
+            }
+          >
+            <option value="auto">Automatic</option>
+            <option value="current_tasks">Current tasks</option>
+            <option value="history">All memories / history</option>
+          </select>
+        </label>
+        <p className="hint">
+          Old intentions are history, not an endless to-do list. Current tasks
+          uses a 7-day window unless a task has a confirmed future deadline or
+          was recently reconfirmed.
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            setQ("What do I need to do now?");
+            setScope("current_tasks");
+          }}
+        >
+          What needs doing now?
+        </button>
         <button className="primary" disabled={busy}>
           {busy ? "Looking through your memories…" : "Find in my memories"}
         </button>

@@ -52,6 +52,16 @@ Open [localhost:3000/capture](http://localhost:3000/capture) and sign in with Cl
 
 The project remains an implementation preview. [BUILD_STATE](docs/BUILD_STATE.md) lists the remaining product gaps and external verification. No live Neon/Clerk account or Vercel deployment was configured as part of this code change.
 
+## Quick capture and memories over time
+
+Capture opens ready to type. Use Ctrl/Cmd+Enter to save and immediately write the next memory. Installing the app puts Capture on your home screen; trusted-device storage keeps offline drafts after a one-time opt-in.
+
+Clerk session restoration and refresh are automatic. To remain signed in for 90 days, configure Clerk's instance session lifetime once; see [Staying signed in](docs/SESSION_SETTINGS.md) for the settings and plan requirements. The account setting cannot be changed by a code deploy and has not been applied remotely.
+
+Ask recognizes common current-task questions (English/Hebrew) and also has an explicit **Current tasks / All memories** selector. Undated intentions older than seven calendar days are excluded from current-task retrieval. For example, a two-week-old "buy milk" remains searchable history but is not suggested as a current obligation. Confirmed future deadlines and recently reconfirmed tasks remain eligible. Done, cancelled and past-due tasks are excluded. In Upcoming, **Still relevant** renews an open task's confirmation; past due dates must be updated separately. Nothing is auto-deleted or falsely marked completed.
+
+The AI receives the current date, your timezone and the memory dates. Old mixed notes contribute only eligible task quotes. This is bounded evidence retrieval, not proof that every task is known or completed. Free-text future dates require a confirmed structured task to extend the seven-day window.
+
 ## Background work
 
 For AI extraction and push reminders, set `CRON_SECRET` to a long random value. Vercel invokes `/api/cron` with that secret. The default schedule is **once daily**, compatible with Vercel Hobby. For frequent processing, use Vercel Pro with `* * * * *` in `vercel.json`, or an external scheduler that sends the same bearer secret. Daily scheduling is not suitable for exact-time reminders or a busy extraction queue.

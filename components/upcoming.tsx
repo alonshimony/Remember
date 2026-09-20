@@ -112,6 +112,23 @@ export default function Upcoming({
               >
                 {i.status === "proposed" ? "Confirm" : "Mark done"}
               </button>
+              {i.status === "open" && (
+                <button
+                  onClick={async () => {
+                    const result = await db!
+                      .from("commitments")
+                      .update({ status: "open" })
+                      .eq("id", i.id);
+                    setStatus(
+                      result.error?.message ||
+                        "Confirmed still relevant for the next 7 days. Past due dates must be updated before this task appears in current answers.",
+                    );
+                    await load();
+                  }}
+                >
+                  Still relevant
+                </button>
+              )}
               <button
                 onClick={async () => {
                   await db!

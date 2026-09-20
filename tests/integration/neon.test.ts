@@ -188,3 +188,125 @@ it("does not allow authenticated roles to add invitations or read identity mappi
     ]),
   ).rejects.toThrow("not invited");
 });
+
+async function temporalFixture(
+  text: string,
+  days: number,
+  options: { noAI?: boolean; occurredOn?: string } = {},
+) {
+  const id = crypto.randomUUID();
+  await run(a, {
+    rpc: "save_capture",
+    args: {
+      payload: {
+        id,
+        space_id: space,
+        text,
+        captured_at: new Date(Date.now() - days * 86400000).toISOString(),
+        timezone: "UTC",
+        occurred_on: options.occurredOn || null,
+        no_ai: options.noAI || false,
+      },
+    },
+  });
+  return id;
+}
+async function taskFixture(
+  id: string,
+  description: string,
+  status: string,
+  due: string | null = null,
+) {
+  const result = await pg.query<{ id: string }>(
+    "insert into commitments(owner_id,space_id,capture_id,description,direction,status,due_on) values($1,$2,$3,$4,$5,$6,$7) returning id",
+    [a, space, id, description, "i_owe", status, due],
+  );
+  const taskId = result.rows[0].id;
+  await pg.query(
+    "update commitment_history set created_at=now()-interval '14 days' where commitment_id=$1",
+    [taskId],
+  );
+  return taskId;
+}
+async function currentRows(owner = a, aiOnly = false) {
+  return (
+    await run(owner, { rpc: "current_task_sources", args: { ai_only: aiOnly } })
+  ).rows as {
+    value: { id: string; action_evidence: { id: string; quote: string }[] };
+  }[];
+}
+it("does not turn two-week-old milk into a current task; retains searchable history and recent notes", async () => {
+  const stale = await temporalFixture("I have to buy some milk", 14);
+  const recent = await temporalFixture("I have to buy some bread", 1);
+  const backdated = await temporalFixture("Historical: buy some coffee", 0, {
+    occurredOn: "2020-01-01",
+  });
+  const rows = await currentRows();
+  expect(rows.some((r) => r.value.id === stale)).toBe(false);
+  expect(rows.some((r) => r.value.id === backdated)).toBe(false);
+  expect(rows.some((r) => r.value.id === recent)).toBe(true);
+  expect(
+    (await run(a, { rpc: "search_memories", args: { query_terms: ["milk"] } }))
+      .rows,
+  ).toHaveLength(1);
+  expect(await currentRows(b)).toEqual([]);
+});
+it("keeps confirmed future tasks, excludes done/cancelled/past-due tasks and revives an explicit reconfirmation", async () => {
+  const future = (
+    await pg.query<{ day: string }>("select (current_date+30)::text as day")
+  ).rows[0].day;
+  const yesterday = (
+    await pg.query<{ day: string }>("select (current_date-1)::text as day")
+  ).rows[0].day;
+  const note = await temporalFixture(
+    "Buy milk. Renew my passport. Call the bank.",
+    14,
+  );
+  await taskFixture(note, "Buy milk.", "done");
+  const passport = await taskFixture(
+    note,
+    "Renew my passport.",
+    "open",
+    future,
+  );
+  const phone = await taskFixture(note, "Call the bank.", "open");
+  let evidence = (await currentRows()).find((r) => r.value.id === note)!.value
+    .action_evidence;
+  expect(evidence.map((e) => e.id)).toEqual([passport]);
+  await run(a, {
+    table: "commitments",
+    action: "update",
+    values: { status: "open" },
+    filters: [{ column: "id", op: "eq", value: phone }],
+  });
+  evidence = (await currentRows()).find((r) => r.value.id === note)!.value
+    .action_evidence;
+  expect(evidence.map((e) => e.id)).toContain(phone);
+  for (const status of ["done", "cancelled", "open"]) {
+    const id = await temporalFixture(`Task ${status}`, 0);
+    await taskFixture(
+      id,
+      `Task ${status}`,
+      status,
+      status === "open" ? yesterday : null,
+    );
+    expect((await currentRows()).some((r) => r.value.id === id)).toBe(false);
+  }
+});
+it("does not refresh an old intention when background extraction happens later; honors AI privacy", async () => {
+  const old = await temporalFixture("Buy old proposed milk", 14);
+  const lateTask = await taskFixture(old, "Buy old proposed milk", "proposed");
+  await pg.query(
+    "update commitment_history set created_at=now() where commitment_id=$1",
+    [lateTask],
+  );
+  expect((await currentRows()).some((r) => r.value.id === old)).toBe(false);
+  const privateId = await temporalFixture("Private task", 0, { noAI: true });
+  await pg.query("update profiles set ai_consent=true where owner_id=$1", [a]);
+  expect((await currentRows()).some((r) => r.value.id === privateId)).toBe(
+    true,
+  );
+  expect(
+    (await currentRows(a, true)).some((r) => r.value.id === privateId),
+  ).toBe(false);
+});
