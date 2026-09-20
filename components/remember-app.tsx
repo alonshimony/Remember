@@ -28,6 +28,7 @@ import {
   type Profile,
   type Space,
 } from "@/lib/domain/schema";
+import { relativeDate } from "@/lib/domain/dates";
 import { copyContext } from "@/lib/domain/provenance";
 import MemoryDetail from "./memory-detail";
 import SettingsPanel from "./settings-panel";
@@ -645,7 +646,9 @@ function Capture({
 }) {
   const [text, setText] = useState("");
   const [space, setSpace] = useState(profile.default_space_id || spaces[0].id);
-  const [date, setDate] = useState("");
+  const [date, setDate] = useState(() =>
+    relativeDate(new Date().toISOString(), profile.timezone, 0),
+  );
   const [noAI, setNoAI] = useState(profile.no_ai_default);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
@@ -726,6 +729,7 @@ function Capture({
       }
       setLast(payload.id);
       setText("");
+      setDate(relativeDate(new Date().toISOString(), profile.timezone, 0));
       editor.current?.focus();
       operation.current = null;
       onSaved();

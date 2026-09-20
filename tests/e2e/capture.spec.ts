@@ -181,3 +181,26 @@ test("Ask allows explicit current tasks and historical scope", async ({
   await page.getByRole("button", { name: "Find in my memories" }).click();
   await expect.poll(() => scopes).toEqual(["current_tasks", "history"]);
 });
+
+test("Capture defaults to today in the profile timezone and resets after backdating", async ({
+  page,
+}) => {
+  const memories = await fixture(page);
+  await page.clock.setFixedTime(new Date("2026-09-20T22:30:00Z"));
+  await page.goto("/capture");
+  const date = page.getByLabel("Occurrence date");
+  const editor = page.getByRole("textbox", {
+    name: "What happened, or what do you need to remember?",
+  });
+  await expect(date).toHaveValue("2026-09-21");
+  await date.fill("2026-09-10");
+  await editor.fill("Synthetic older memory");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(editor).toHaveValue("");
+  expect(memories[0].occurred_on).toBe("2026-09-10");
+  await expect(date).toHaveValue("2026-09-21");
+  await editor.fill("Synthetic memory from today");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(editor).toHaveValue("");
+  expect(memories[1].occurred_on).toBe("2026-09-21");
+});
